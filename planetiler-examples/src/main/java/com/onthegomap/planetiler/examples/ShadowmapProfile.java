@@ -229,14 +229,14 @@ public class ShadowmapProfile implements Profile {
       boolean hasML = false;
 
       for (VectorTile.Feature item : items) {
-        if ((boolean) item.attrs().get("isPart")) {
+        if ((boolean) item.tags().get("isPart")) {
           hasParts = true;
           break;
         }
       }
 
       for (VectorTile.Feature item : items) {
-        if ((boolean) item.attrs().get("isML")) {
+        if ((boolean) item.tags().get("isML")) {
           hasML = true;
           break;
         }
@@ -248,13 +248,13 @@ public class ShadowmapProfile implements Profile {
 
         if (hasParts) {
           for (VectorTile.Feature item : items) {
-            boolean isML = (boolean) item.attrs().get("isML");
+            boolean isML = (boolean) item.tags().get("isML");
 
             if (isML) {
               continue;
             }
 
-            boolean isPart = (boolean) item.attrs().get("isPart");
+            boolean isPart = (boolean) item.tags().get("isPart");
             Geometry geometry = item.geometry().decode();
             Envelope bbox = geometry.getEnvelopeInternal();
 
@@ -299,7 +299,7 @@ public class ShadowmapProfile implements Profile {
           var mlBuildings = new ArrayList<MLBuildingWithEnvelope>();
 
           for (VectorTile.Feature item : items) {
-            boolean isML = (boolean) item.attrs().get("isML");
+            boolean isML = (boolean) item.tags().get("isML");
 
             if (!isML) {
               continue;
@@ -331,9 +331,9 @@ public class ShadowmapProfile implements Profile {
               }
 
               isDuplicate = true;
-              var mlHeight = (double) mlBuilding.feature.attrs().get("height");
+              var mlHeight = (double) mlBuilding.feature.tags().get("height");
 
-              outline.feature.attrs().put("heightML", mlHeight);
+              outline.feature.tags().put("heightML", mlHeight);
             }
 
             for (BuildingPartWithEnvelope part : parts) {
@@ -353,9 +353,9 @@ public class ShadowmapProfile implements Profile {
               }
 
               isDuplicate = true;
-              var mlHeight = (double) mlBuilding.feature.attrs().get("height");
+              var mlHeight = (double) mlBuilding.feature.tags().get("height");
 
-              part.feature.attrs().put("heightML", mlHeight);
+              part.feature.tags().put("heightML", mlHeight);
             }
 
             if (isDuplicate) {
@@ -366,7 +366,7 @@ public class ShadowmapProfile implements Profile {
       }
 
       for (VectorTile.Feature item : items) {
-        item.attrs().remove("isPart");
+        item.tags().remove("isPart");
         //item.attrs().remove("isML");
       }
 
