@@ -5,9 +5,9 @@ file as the first argument:
 
 ```bash
 # from a java build
-java -jar planetiler.jar schema.yml
+java -jar planetiler.jar generate-custom --schema=schema.yml
 # or with docker (put the schema in data/schema.yml to include in the attached volume)
-docker run -v "$(pwd)/data":/data ghcr.io/onthegomap/planetiler:latest /data/schema.yml
+docker run -v "$(pwd)/data":/data ghcr.io/onthegomap/planetiler:latest generate-custom --schema=/data/schema.yml
 ```
 
 Schema files are in [YAML 1.2](https://yaml.org) format and support [anchors and aliases](#anchors-and-aliases) for
@@ -132,7 +132,7 @@ to `france.osm.pbf`. Planetiler searches for argument values in this order:
 3. Environmental variables with "PLANETILER_" prefix: `PLANETILER_AREA=france java ...`
 4. Default value from the config
 
-Argument values are available from the [`args` variable](#root-context) in
+Argument values are available from the [`args` variable](#1-root-context) in
 an [inline script expression](#inline-script-expression) or the [`arg_value` expression](#argument-value-expression).
 
 ### Built-in arguments
@@ -152,7 +152,7 @@ cat planetiler-custommap/planetiler.schema.json | jq -r '.properties.args.proper
 - `maxzoom` - Maximum tile zoom level to emit
 - `render_maxzoom` - Maximum rendering zoom level up to
 - `force` - Overwriting output file and ignore warnings
-- `gzip_temp` - Gzip temporary feature storage (uses more CPU, but less disk space)
+- `compress_temp` - Gzip temporary feature storage (uses more CPU, but less disk space)
 - `mmap_temp` - Use memory-mapped IO for temp feature files
 - `sort_max_readers` - Maximum number of concurrent read threads to use when sorting chunks
 - `sort_max_writers` - Maximum number of concurrent write threads to use when sorting chunks
@@ -192,6 +192,8 @@ A layer contains a thematically-related set of features from one or more input s
 
 - `id` - Unique name of this layer
 - `features` - A list of features contained in this layer. See [Layer Features](#layer-feature)
+- `tile_post_process` - Optional processing operations to merge features with the same attributes in a rendered tile.
+  See [Tile Post Process](#tile-post-process)
 
 For example:
 
@@ -201,6 +203,11 @@ layers:
     features:
       - { ... }
       - { ... }
+    tile_post_process:
+      merge_line_strings:
+        min_length: 1
+        tolerance: 1
+        buffer: 5
 ```
 
 ## Layer Feature
@@ -222,6 +229,8 @@ A feature is a defined set of objects that meet a specified filter criteria.
 - `exclude_when` - A [Boolean Expression](#boolean-expression) which determines if a feature that matched the include
   expression should be skipped. If unspecified, no exclusion filter is applied.
 - `min_zoom` - An [Expression](#expression) that returns the minimum zoom to render this feature at.
+- `min_size` - An [Expression](#expression) that returns the minimum length of line features or square root of the
+  minimum area of polygon features to emit below the maximum zoom-level of the map.
 - `attributes` - An array of [Feature Attribute](#feature-attribute) objects that specify the attributes to be included
   on this output feature.
 
@@ -275,6 +284,37 @@ min_zoom: 10
 include_when: "${ double(feature.tags.voltage) > 1000 }"
 tag_value: voltage
 type: integer
+```
+
+## Tile Post Process
+
+Specific tile post processing operations for merging features may be defined:
+
+- `merge_line_strings` - Combines linestrings with the same set of attributes into a multilinestring where segments with
+  touching endpoints are merged.
+- `merge_polygons` - Combines polygons with the same set of attributes into a multipolygon where overlapping/touching
+  polygons
+  are combined into fewer polygons covering the same area.
+
+The follow attributes for `merge_line_strings` may be set:
+
+- `min_length` - Minimum tile pixel length of features to emit, or 0 to emit all merged linestrings.
+- `tolerance` - After merging, simplify linestrings using this pixel tolerance, or -1 to skip simplification step.
+- `buffer` - Number of pixels outside the visible tile area to include detail for, or -1 to skip clipping step.
+
+The follow attribute for `merge_polygons` may be set:
+
+- `min_area` - Minimum area in square tile pixels of polygons to emit.
+
+For example:
+
+```yaml
+merge_line_strings:
+  min_length: 1
+  tolerance: 1
+  buffer: 5
+merge_polygons:
+  min_area: 1
 ```
 
 ## Data Type
@@ -426,39 +466,51 @@ value: "${ 8 * 24 - 2 }"
 
 #### Inline Script Contexts
 
-Scripts are parsed and evaluated inside a "context" that defines the variables available to that script. Contexts are
-nested, so each child context can also access the variables from its parent.
+Scripts are parsed and evaluated inside a "context" that defines the variables available to that script.
 
-> ##### root context
->
-> Available variables:
-> - `args` - a map from [argument](#arguments) name to value, see also [built-in arguments](#built-in-arguments) that
->
->> are always available.
->>
->> ##### process feature context
->>
->> Context available when processing an input feature, for example testing whether to include it from `include_when`.
->> Available variables:
->>
->> - `feature.tags` - map with key/value tags from the input feature
->> - `feature.id` - numeric ID of the input feature
->> - `feature.source` - string source ID this feature came from
->> - `feature.source_layer` - optional layer within the source the feature came from
->>
->>> ##### post-match context
->>>
->>> Context available after a feature has matched, for example computing an attribute value. Adds variables:
->>>
->>> - `match_key` - string tag that triggered a match to include the feature in this layer
->>> - `match_value` - the tag value associated with that key
->>>
->>>> ##### configure attribute context
->>>>
->>>> Context available after the value of an attribute has been computed, for example: set min zoom to render an
->>>> attribute. Adds variables:
->>>>
->>>> - `value` the value that was computed for this key
+**_Notice_**: Contexts are nested, so each child context can also access the variables from its parent.
+
+##### 1. Root Context
+
+Available variables:
+
+- `args` - a map from [argument](#arguments) name to value, see also [built-in arguments](#built-in-arguments) that are
+  always available.
+
+##### 2. Process Feature Context
+
+Context available when processing an input feature, for example testing whether to include it from `include_when`.
+
+Additional variables, on top of the root context:
+
+- `feature.tags` - map with key/value tags from the input feature
+- `feature.id` - numeric ID of the input feature
+- `feature.source` - string source ID this feature came from
+- `feature.source_layer` - optional layer within the source the feature came from
+- `feature.osm_changeset` - optional OSM changeset ID for this feature
+- `feature.osm_version` - optional OSM element version for this feature
+- `feature.osm_timestamp` - optional OSM last modified timestamp for this feature
+- `feature.osm_user_id` - optional ID of the OSM user that last modified this feature
+- `feature.osm_user_name` - optional name of the OSM user that last modified this feature
+- `feature.osm_type` - type of the OSM element as a string: `"node"`, `"way"`, or `"relation"`
+
+##### 3. Post-Match Context
+
+Context available after a feature has matched, for example computing an attribute value.
+
+Additional variables, on top of the process feature context:
+
+- `match_key` - string tag that triggered a match to include the feature in this layer
+- `match_value` - the tag value associated with that key
+
+##### 4. Configure Attribute Context
+
+Context available after the value of an attribute has been computed, for example: set min zoom to render an
+attribute.
+
+Additional variable, on top of the post-match context:
+
+- `value` the value that was computed for this key
 
 For example:
 
@@ -497,7 +549,7 @@ in [PlanetilerStdLib](src/main/java/com/onthegomap/planetiler/custommap/expressi
   - `<string>.replace(from, to, limit)` returns the input string with the first N occurrences of from replaced by to
   - `<string>.replaceRegex(pattern, value)` replaces every occurrence of regular expression with value from the string
     it was called on using java's
-    built-in [replaceAll](<https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/regex/Matcher.html#replaceAll(java.lang.String)>)
+    built-in [replaceAll](<https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/regex/Matcher.html#replaceAll(java.lang.String)>)
     behavior
   - `<string>.split(separator)` returns a list of strings split from the input by a separator
   - `<string>.split(separator, limit)` splits the list into up to N parts
@@ -555,7 +607,7 @@ include_when:
 
 When a feature matches a boolean expression in the `include_when` field, the first key that triggered the match is
 available to other expressions as `match_key` and its value is available as `match_value`
-(See [Post-Match Context](#post-match-context)):
+(See [Post-Match Context](#3-post-match-context)):
 
 ```yaml
 include_when:
@@ -672,6 +724,8 @@ docker run -v "$(pwd)/data":/data ghcr.io/onthegomap/planetiler:latest verify /d
   - `geometry` - Geometry type of the expected output feature.
   - `min_zoom` - Min zoom level that the output feature appears in.
   - `max_zoom` - Max zoom level that the output feature appears in.
+  - `min_size` - Minimum length of line features or square root of the minimum area of polygon features to emit below
+    the maximum zoom-level of the map.
   - `tags` - Attributes expected on the output vector tile feature, or `null` if the attribute should not be set. Use
     `allow_extra_tags: true` to fail if any other tags appear besides the ones specified here.
   - `allow_extra_tags` - If `true`, then fail when extra attributes besides tags appear on the output feature.

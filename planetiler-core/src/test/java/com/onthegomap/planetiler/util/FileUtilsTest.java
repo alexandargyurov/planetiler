@@ -119,6 +119,13 @@ class FileUtilsTest {
       txtFiles.stream().sorted().toList(),
       matchingPaths.stream().sorted().toList()
     );
+
+    matchingPaths = Glob.of(parent).resolve("*.txt").find();
+
+    assertEquals(
+      txtFiles.stream().sorted().toList(),
+      matchingPaths.stream().sorted().toList()
+    );
   }
 
   @Test
@@ -140,6 +147,9 @@ class FileUtilsTest {
     // Otherwise, the files inside the zip should be returned.
     assertEquals(List.of(zipFile.resolve("inner.txt")),
       FileUtils.walkPathWithPattern(parent, "*.zip", mockWalkZipFile));
+
+
+    assertEquals(List.of(zipFile), Glob.of(parent).resolve("*.zip").find());
   }
 
   @Test
@@ -151,5 +161,18 @@ class FileUtilsTest {
     assertEquals(
       List.of("/shapefile/stations.shp", "/shapefile/stations.shx"),
       matchingPaths.stream().map(Path::toString).sorted().toList());
+
+    matchingPaths = Glob.of(zipPath).resolve("stations.sh[px]").find();
+
+    assertEquals(
+      List.of("/shapefile/stations.shp", "/shapefile/stations.shx"),
+      matchingPaths.stream().map(Path::toString).sorted().toList());
+  }
+
+  @Test
+  void testExpandFile() throws IOException {
+    Path path = tmpDir.resolve("toExpand");
+    FileUtils.setLength(path, 1000);
+    assertEquals(1000, Files.size(path));
   }
 }

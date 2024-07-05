@@ -30,7 +30,7 @@ public interface WriteableTileArchive extends Closeable {
    * Called before any tiles are written into {@link TileWriter}. Implementations of TileArchive should set up any
    * required state here.
    */
-  default void initialize(TileArchiveMetadata metadata) {}
+  default void initialize() {}
 
   /**
    * Implementations should return a object that implements {@link TileWriter} The specific TileWriter returned might
@@ -44,14 +44,11 @@ public interface WriteableTileArchive extends Closeable {
    */
   default void finish(TileArchiveMetadata tileArchiveMetadata) {}
 
+  long bytesWritten();
+
   interface TileWriter extends Closeable {
 
     void write(TileEncodingResult encodingResult);
-
-    // TODO: exists for compatibility reasons
-    default void write(com.onthegomap.planetiler.mbtiles.TileEncodingResult encodingResult) {
-      write(new TileEncodingResult(encodingResult.coord(), encodingResult.tileData(), encodingResult.tileDataHash()));
-    }
 
     @Override
     void close();

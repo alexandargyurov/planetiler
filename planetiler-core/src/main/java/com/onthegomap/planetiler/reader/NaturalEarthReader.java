@@ -15,7 +15,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -101,10 +100,14 @@ public class NaturalEarthReader extends SimpleReader<SimpleFeature> {
           .findFirst()
           .orElseThrow(() -> new IllegalArgumentException("No .sqlite file found inside " + path));
         extracted = unzippedDir.resolve(URLEncoder.encode(zipEntry.toString(), StandardCharsets.UTF_8));
+        if (!extracted.startsWith(unzippedDir)) {
+          throw new IllegalArgumentException(
+            "Zip file tried to extract child outside of folder: " + zipEntry.getFileName());
+        }
         FileUtils.createParentDirectories(extracted);
         if (!keepUnzipped || FileUtils.isNewer(path, extracted)) {
           LOGGER.info("unzipping {} to {}", path.toAbsolutePath(), extracted);
-          Files.copy(Files.newInputStream(zipEntry), extracted, StandardCopyOption.REPLACE_EXISTING);
+          FileUtils.safeCopy(Files.newInputStream(zipEntry), extracted);
         }
         if (!keepUnzipped) {
           extracted.toFile().deleteOnExit();
@@ -169,6 +172,7 @@ public class NaturalEarthReader extends SimpleReader<SimpleFeature> {
           }
         }
         if (geometryColumn >= 0) {
+          var wkbReader = GeoUtils.wkbReader();
           while (rs.next()) {
             byte[] geometry = rs.getBytes(geometryColumn + 1);
             if (geometry == null) {
@@ -176,8 +180,8 @@ public class NaturalEarthReader extends SimpleReader<SimpleFeature> {
             }
 
             // create the feature and pass to next stage
-            Geometry latLonGeometry = GeoUtils.WKB_READER.read(geometry);
-            SimpleFeature readerGeometry = SimpleFeature.create(latLonGeometry, new HashMap<>(column.length - 1),
+            Geometry latLonGeometry = wkbReader.read(geometry);
+            SimpleFeature readerGeometry = SimpleFeature.create(latLonGeometry, HashMap.newHashMap(column.length - 1),
               sourceName, table, ++id);
             for (int c = 0; c < column.length; c++) {
               if (c != geometryColumn) {

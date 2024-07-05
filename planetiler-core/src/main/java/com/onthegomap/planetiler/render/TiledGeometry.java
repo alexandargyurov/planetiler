@@ -278,7 +278,7 @@ public class TiledGeometry {
             TileCoord tile = TileCoord.ofXYZ(wrappedX, y, z);
             double tileY = worldY - y;
             tileContents.computeIfAbsent(tile, t -> List.of(new ArrayList<>()))
-              .get(0)
+              .getFirst()
               .add(GeoUtils.coordinateSequence(tileX * 256, tileY * 256));
           }
         }
@@ -489,7 +489,7 @@ public class TiledGeometry {
     for (var entry : inProgressShapes.entrySet()) {
       TileCoord tileID = entry.getKey();
       List<CoordinateSequence> inSeqs = entry.getValue();
-      if (area && inSeqs.get(0).size() < 4) {
+      if (area && inSeqs.getFirst().size() < 4) {
         // not enough points in outer polygon, ignore
         continue;
       }

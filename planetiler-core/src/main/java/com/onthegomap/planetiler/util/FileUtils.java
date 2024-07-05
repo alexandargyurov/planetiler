@@ -1,12 +1,18 @@
 package com.onthegomap.planetiler.util;
 
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.WRITE;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.ClosedFileSystemException;
 import java.nio.file.FileStore;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -44,7 +50,7 @@ public class FileUtils {
     return StreamSupport.stream(fileSystem.getRootDirectories().spliterator(), false)
       .flatMap(rootDirectory -> {
         try {
-          return Files.walk(rootDirectory);
+          return Files.walk(rootDirectory, FileVisitOption.FOLLOW_LINKS);
         } catch (IOException e) {
           LOGGER.error("Unable to walk " + rootDirectory + " in " + fileSystem, e);
           return Stream.empty();
@@ -77,9 +83,9 @@ public class FileUtils {
             .toList();
         }
       } else if (Files.isDirectory(basePath)) {
-        try (var walk = Files.walk(basePath)) {
+        try (var walk = Files.walk(basePath, FileVisitOption.FOLLOW_LINKS)) {
           return walk
-            .filter(path -> matcher.matches(path.getFileName()))
+            .filter(path -> matcher.matches(path.getFileName()) || matcher.matches(basePath.relativize(path)))
             .flatMap(path -> {
               if (FileUtils.hasExtension(path, "zip")) {
                 return walkZipFile.apply(path).stream();
@@ -104,8 +110,9 @@ public class FileUtils {
    * @param pattern  pattern to match filenames against, as described in {@link FileSystem#getPathMatcher(String)}.
    */
   public static List<Path> walkPathWithPattern(Path basePath, String pattern) {
-    return walkPathWithPattern(basePath, pattern, zipPath -> List.of(zipPath));
+    return walkPathWithPattern(basePath, pattern, List::of);
   }
+
 
   /** Returns true if {@code path} ends with ".extension" (case-insensitive). */
   public static boolean hasExtension(Path path, String extension) {
@@ -263,7 +270,7 @@ public class FileUtils {
    * @throws UncheckedIOException if an IO exception occurs
    */
   public static void safeCopy(InputStream inputStream, Path destPath) {
-    try (var outputStream = Files.newOutputStream(destPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+    try (var outputStream = Files.newOutputStream(destPath, StandardOpenOption.CREATE, WRITE)) {
       int totalSize = 0;
 
       int nBytes;
@@ -310,7 +317,7 @@ public class FileUtils {
 
           try (
             var out = Files.newOutputStream(destination, StandardOpenOption.CREATE_NEW,
-              StandardOpenOption.WRITE)
+              WRITE)
           ) {
             totalEntryArchive++;
             while ((nBytes = zip.read(buffer)) > 0) {
@@ -364,6 +371,18 @@ public class FileUtils {
       return Files.notExists(dest) || getLastModifiedTime(src) > getLastModifiedTime(dest);
     } catch (IOException e) {
       return true;
+    }
+  }
+
+  /** Expands the file at {@code path} to {@code size} bytes. */
+  public static void setLength(Path path, long size) {
+    try (var fc = FileChannel.open(path, CREATE, WRITE)) {
+      int written = fc.write(ByteBuffer.allocate(1), size - 1);
+      if (written != 1) {
+        throw new IOException("Unable to expand " + path + " to " + size);
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
     }
   }
 }

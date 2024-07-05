@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
@@ -444,7 +445,11 @@ public class Arguments {
    */
   public int getInteger(String key, String description, int defaultValue) {
     String value = getArg(key, Integer.toString(defaultValue));
-    int parsed = Integer.parseInt(value);
+    int parsed = switch (value.toLowerCase(Locale.ROOT)) {
+      case "false" -> 0;
+      case "true" -> defaultValue;
+      default -> Integer.parseInt(value);
+    };
     logArgValue(key, description, parsed);
     return parsed;
   }
@@ -483,6 +488,13 @@ public class Arguments {
     long parsed = Long.parseLong(value);
     logArgValue(key, description, parsed);
     return parsed;
+  }
+
+  public <T> T getObject(String key, String description, T defaultValue, Function<String, T> converter) {
+    final String serializedValue = getArg(key);
+    final T value = serializedValue == null ? defaultValue : converter.apply(serializedValue);
+    logArgValue(key, description, value);
+    return value;
   }
 
   /**
@@ -537,5 +549,10 @@ public class Arguments {
       key -> allowed.contains(normalize(key)) ? provider.apply(key) : null,
       () -> keys.get().stream().filter(key -> allowed.contains(normalize(key))).toList()
     );
+  }
+
+  /** Returns a new arguments instance where the value for {@code key} defaults to {@code value}. */
+  public Arguments withDefault(Object key, Object value) {
+    return orElse(Arguments.of(key.toString().replaceFirst("^-*", ""), value));
   }
 }

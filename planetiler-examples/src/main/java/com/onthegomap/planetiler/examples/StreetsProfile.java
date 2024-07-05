@@ -701,7 +701,7 @@ public class StreetsProfile implements Profile {
       boolean hasParts = false;
 
       for (VectorTile.Feature item : items) {
-        if ((boolean) item.attrs().get("isPart")) {
+        if ((boolean) item.tags().get("isPart")) {
           hasParts = true;
           break;
         }
@@ -715,7 +715,7 @@ public class StreetsProfile implements Profile {
           Geometry geometry = item.geometry().decode();
           Envelope bbox = geometry.getEnvelopeInternal();
 
-          boolean isPart = (boolean) item.attrs().get("isPart");
+          boolean isPart = (boolean) item.tags().get("isPart");
 
           if (isPart) {
             parts.add(new BuildingPartWithEnvelope(item, geometry, bbox));
@@ -749,7 +749,7 @@ public class StreetsProfile implements Profile {
       }
 
       for (VectorTile.Feature item : items) {
-        item.attrs().remove("isPart");
+        item.tags().remove("isPart");
       }
     }
 

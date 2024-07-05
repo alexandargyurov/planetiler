@@ -13,6 +13,8 @@ import com.onthegomap.planetiler.expression.DataType;
 import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.reader.WithGeometryType;
 import com.onthegomap.planetiler.reader.WithTags;
+import com.onthegomap.planetiler.reader.osm.OsmElement;
+import com.onthegomap.planetiler.reader.osm.OsmSourceFeature;
 import com.onthegomap.planetiler.util.Try;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -188,7 +190,7 @@ public class Contexts {
       argumentValues.put("maxzoom", config.maxzoom());
       argumentValues.put("render_maxzoom", config.maxzoomForRendering());
       argumentValues.put("force", config.force());
-      argumentValues.put("gzip_temp", config.gzipTempStorage());
+      argumentValues.put("compress_temp", config.compressTempStorage());
       argumentValues.put("mmap_temp", config.mmapTempStorage());
       argumentValues.put("sort_max_readers", config.sortMaxReaders());
       argumentValues.put("sort_max_writers", config.sortMaxWriters());
@@ -340,6 +342,12 @@ public class Contexts {
     private static final String FEATURE_ID = "feature.id";
     private static final String FEATURE_SOURCE = "feature.source";
     private static final String FEATURE_SOURCE_LAYER = "feature.source_layer";
+    private static final String FEATURE_OSM_CHANGESET = "feature.osm_changeset";
+    private static final String FEATURE_OSM_VERSION = "feature.osm_version";
+    private static final String FEATURE_OSM_TIMESTAMP = "feature.osm_timestamp";
+    private static final String FEATURE_OSM_USER_ID = "feature.osm_user_id";
+    private static final String FEATURE_OSM_USER_NAME = "feature.osm_user_name";
+    private static final String FEATURE_OSM_TYPE = "feature.osm_type";
 
     public static ScriptEnvironment<ProcessFeature> description(Root root) {
       return root.description()
@@ -348,7 +356,13 @@ public class Contexts {
           Decls.newVar(FEATURE_TAGS, Decls.newMapType(Decls.String, Decls.Any)),
           Decls.newVar(FEATURE_ID, Decls.Int),
           Decls.newVar(FEATURE_SOURCE, Decls.String),
-          Decls.newVar(FEATURE_SOURCE_LAYER, Decls.String)
+          Decls.newVar(FEATURE_SOURCE_LAYER, Decls.String),
+          Decls.newVar(FEATURE_OSM_CHANGESET, Decls.Int),
+          Decls.newVar(FEATURE_OSM_VERSION, Decls.Int),
+          Decls.newVar(FEATURE_OSM_TIMESTAMP, Decls.Int),
+          Decls.newVar(FEATURE_OSM_USER_ID, Decls.Int),
+          Decls.newVar(FEATURE_OSM_USER_NAME, Decls.String),
+          Decls.newVar(FEATURE_OSM_TYPE, Decls.String)
         );
     }
 
@@ -360,7 +374,21 @@ public class Contexts {
           case FEATURE_ID -> feature.id();
           case FEATURE_SOURCE -> feature.getSource();
           case FEATURE_SOURCE_LAYER -> wrapNullable(feature.getSourceLayer());
-          default -> null;
+          default -> {
+            OsmElement elem = feature instanceof OsmSourceFeature osm ? osm.originalElement() : null;
+            if (FEATURE_OSM_TYPE.equals(key)) {
+              yield elem == null ? null : elem.type().name().toLowerCase();
+            }
+            OsmElement.Info info = elem != null ? elem.info() : null;
+            yield info == null ? null : switch (key) {
+              case FEATURE_OSM_CHANGESET -> info.changeset();
+              case FEATURE_OSM_VERSION -> info.version();
+              case FEATURE_OSM_TIMESTAMP -> info.timestamp();
+              case FEATURE_OSM_USER_ID -> info.userId();
+              case FEATURE_OSM_USER_NAME -> wrapNullable(info.user());
+              default -> null;
+            };
+          }
         };
       } else {
         return null;
@@ -410,7 +438,7 @@ public class Contexts {
     }
 
     public String matchKey() {
-      return matchKeys().isEmpty() ? null : matchKeys().get(0);
+      return matchKeys().isEmpty() ? null : matchKeys().getFirst();
     }
 
     public Object matchValue() {

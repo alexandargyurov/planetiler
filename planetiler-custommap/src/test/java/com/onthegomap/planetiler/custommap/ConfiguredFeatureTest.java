@@ -9,13 +9,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.onthegomap.planetiler.FeatureCollector;
 import com.onthegomap.planetiler.FeatureCollector.Feature;
 import com.onthegomap.planetiler.Profile;
+import com.onthegomap.planetiler.VectorTile;
 import com.onthegomap.planetiler.config.Arguments;
 import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.custommap.configschema.DataSourceType;
+import com.onthegomap.planetiler.custommap.configschema.MergeLineStrings;
+import com.onthegomap.planetiler.custommap.configschema.MergePolygons;
+import com.onthegomap.planetiler.custommap.configschema.PostProcess;
 import com.onthegomap.planetiler.custommap.configschema.SchemaConfig;
 import com.onthegomap.planetiler.custommap.util.TestConfigurableUtils;
+import com.onthegomap.planetiler.geo.GeoUtils;
+import com.onthegomap.planetiler.geo.GeometryException;
 import com.onthegomap.planetiler.reader.SimpleFeature;
 import com.onthegomap.planetiler.reader.SourceFeature;
+import com.onthegomap.planetiler.reader.osm.OsmElement;
 import com.onthegomap.planetiler.stats.Stats;
 import java.nio.file.Path;
 import java.util.List;
@@ -34,6 +41,7 @@ class ConfiguredFeatureTest {
   private static final Function<String, Path> TEST_RESOURCE = TestConfigurableUtils::pathToTestResource;
   private static final Function<String, Path> SAMPLE_RESOURCE = TestConfigurableUtils::pathToSample;
   private static final Function<String, Path> TEST_INVALID_RESOURCE = TestConfigurableUtils::pathToTestInvalidResource;
+  private static final OsmElement.Info OSM_INFO = new OsmElement.Info(2, 3, 4, 5, "user");
 
   private static final Map<String, Object> waterTags = Map.of(
     "natural", "water",
@@ -124,14 +132,15 @@ class ConfiguredFeatureTest {
   private void testPolygon(String config, Map<String, Object> tags,
     Consumer<Feature> test, int expectedMatchCount) {
     var sf =
-      SimpleFeature.createFakeOsmFeature(newPolygon(0, 0, 1, 0, 1, 1, 0, 0), tags, "osm", null, 1, emptyList());
+      SimpleFeature.createFakeOsmFeature(newPolygon(0, 0, 1, 0, 1, 1, 0, 0), tags, "osm", null, 1, emptyList(),
+        OSM_INFO);
     testFeature(config, sf, test, expectedMatchCount);
   }
 
   private void testPoint(String config, Map<String, Object> tags,
     Consumer<Feature> test, int expectedMatchCount) {
     var sf =
-      SimpleFeature.createFakeOsmFeature(newPoint(0, 0), tags, "osm", null, 1, emptyList());
+      SimpleFeature.createFakeOsmFeature(newPoint(0, 0), tags, "osm", null, 1, emptyList(), OSM_INFO);
     testFeature(config, sf, test, expectedMatchCount);
   }
 
@@ -139,22 +148,106 @@ class ConfiguredFeatureTest {
   private void testLinestring(String config,
     Map<String, Object> tags, Consumer<Feature> test, int expectedMatchCount) {
     var sf =
-      SimpleFeature.createFakeOsmFeature(newLineString(0, 0, 1, 0, 1, 1), tags, "osm", null, 1, emptyList());
+      SimpleFeature.createFakeOsmFeature(newLineString(0, 0, 1, 0, 1, 1), tags, "osm", null, 1, emptyList(), OSM_INFO);
     testFeature(config, sf, test, expectedMatchCount);
   }
 
   private void testPolygon(Function<String, Path> pathFunction, String schemaFilename, Map<String, Object> tags,
     Consumer<Feature> test, int expectedMatchCount) {
     var sf =
-      SimpleFeature.createFakeOsmFeature(newPolygon(0, 0, 1, 0, 1, 1, 0, 0), tags, "osm", null, 1, emptyList());
+      SimpleFeature.createFakeOsmFeature(newPolygon(0, 0, 1, 0, 1, 1, 0, 0), tags, "osm", null, 1, emptyList(),
+        OSM_INFO);
     testFeature(pathFunction, schemaFilename, sf, test, expectedMatchCount);
   }
 
   private void testLinestring(Function<String, Path> pathFunction, String schemaFilename,
     Map<String, Object> tags, Consumer<Feature> test, int expectedMatchCount) {
     var sf =
-      SimpleFeature.createFakeOsmFeature(newLineString(0, 0, 1, 0, 1, 1), tags, "osm", null, 1, emptyList());
+      SimpleFeature.createFakeOsmFeature(newLineString(0, 0, 1, 0, 1, 1), tags, "osm", null, 1, emptyList(), OSM_INFO);
     testFeature(pathFunction, schemaFilename, sf, test, expectedMatchCount);
+  }
+
+  @Test
+  void testFeaturePostProcessorNoop() throws GeometryException {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+      """;
+    var profile = loadConfig(config);
+
+    VectorTile.Feature feature = new VectorTile.Feature(
+      "testLayer",
+      1,
+      VectorTile.encodeGeometry(GeoUtils.point(0, 0)),
+      Map.of()
+    );
+    assertEquals(List.of(feature), profile.postProcessLayerFeatures("testLayer", 0, List.of(feature)));
+  }
+
+  @Test
+  void testFeaturePostProcessorMergeLineStrings() throws GeometryException {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+        tile_post_process:
+          merge_line_strings:
+            min_length: 1
+            tolerance: 5
+            buffer: 10
+      """;
+    var profile = loadConfig(config);
+
+    VectorTile.Feature feature = new VectorTile.Feature(
+      "testLayer",
+      1,
+      VectorTile.encodeGeometry(GeoUtils.point(0, 0)),
+      Map.of()
+    );
+    assertEquals(List.of(feature), profile.postProcessLayerFeatures("testLayer", 0, List.of(feature)));
+  }
+
+  @Test
+  void testFeaturePostProcessorMergePolygons() throws GeometryException {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+        tile_post_process:
+          merge_polygons:
+            min_area: 3
+      """;
+    var profile = loadConfig(config);
+
+    VectorTile.Feature feature = new VectorTile.Feature(
+      "testLayer",
+      1,
+      VectorTile.encodeGeometry(GeoUtils.point(0, 0)),
+      Map.of()
+    );
+    assertEquals(List.of(feature), profile.postProcessLayerFeatures("testLayer", 0, List.of(feature)));
   }
 
   @Test
@@ -458,6 +551,13 @@ class ConfiguredFeatureTest {
     "\\\\${feature.id}|\\${feature.id}",
     "${feature.source}|osm",
     "${feature.source_layer}|null",
+    "${feature.osm_changeset}|2",
+    "${feature.osm_timestamp}|3",
+    "${feature.osm_user_id}|4",
+    "${feature.osm_version}|5",
+    "${feature.osm_user_name}|user",
+    "${feature.osm_type}|node",
+    "${feature.osm_type.charAt(0)}|n",
     "${coalesce(feature.source_layer, 'missing')}|missing",
     "{match: {test: {natural: water}}}|test",
     "{match: {test: {natural: not_water}}}|null",
@@ -786,6 +886,7 @@ class ConfiguredFeatureTest {
   void testInvalidSchemas() {
     testInvalidSchema("bad_geometry_type.yml", "Profile defined with invalid geometry type");
     testInvalidSchema("no_layers.yml", "Profile defined with no layers");
+    testInvalidSchema("invalid_post_process.yml", "Profile defined with invalid post process element");
   }
 
   private void testInvalidSchema(String filename, String message) {
@@ -1021,5 +1122,104 @@ class ConfiguredFeatureTest {
       "url", "https://example.com/file.osm.pbf"
     )));
     assertEquals("example.com_file.osm.pbf", loadConfig(config).sources().get(0).defaultFileUrl());
+  }
+
+  @ParameterizedTest
+  @CsvSource("""
+    10,10
+    ${10+1},11
+    ${feature.tags.key}|9
+    """)
+  void setMinSize(String input, double output) {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          min_size: %s
+          geometry: line
+      """.formatted(input);
+    testLinestring(config, Map.of("key", 9), feature -> {
+      assertEquals(output, feature.getMinPixelSizeAtZoom(11));
+    }, 1);
+  }
+
+  @Test
+  void testSchemaEmptyPostProcess() {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+      """;
+    this.planetilerConfig = PlanetilerConfig.from(Arguments.of(Map.of()));
+    assertNull(loadConfig(config).findFeatureLayer("testLayer").postProcess());
+  }
+
+  @Test
+  void testSchemaPostProcessWithMergeLineStrings() {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+        tile_post_process:
+          merge_line_strings:
+            min_length: 1
+            tolerance: 5
+            buffer: 10
+      """;
+    this.planetilerConfig = PlanetilerConfig.from(Arguments.of(Map.of()));
+    assertEquals(new PostProcess(
+      new MergeLineStrings(
+        1,
+        5,
+        10
+      ),
+      null
+    ), loadConfig(config).findFeatureLayer("testLayer").postProcess());
+  }
+
+  @Test
+  void testSchemaPostProcessWithMergePolygons() {
+    var config = """
+      sources:
+        osm:
+          type: osm
+          url: geofabrik:rhode-island
+          local_path: data/rhode-island.osm.pbf
+      layers:
+      - id: testLayer
+        features:
+        - source: osm
+          geometry: point
+        tile_post_process:
+          merge_polygons:
+            min_area: 3
+      """;
+    this.planetilerConfig = PlanetilerConfig.from(Arguments.of(Map.of()));
+    assertEquals(new PostProcess(
+      null,
+      new MergePolygons(
+        3
+      )
+    ), loadConfig(config).findFeatureLayer("testLayer").postProcess());
   }
 }
