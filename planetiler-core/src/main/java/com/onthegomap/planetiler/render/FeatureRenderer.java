@@ -220,7 +220,11 @@ public class FeatureRenderer implements Consumer<FeatureCollector.Feature>, Clos
     Geometry scaled = AffineTransformation.scaleInstance(scale, scale).transform(input);
     TiledGeometry sliced;
     Geometry geom = scaled;
-    //Geometry geom = DouglasPeuckerSimplifier.simplify(scaled, tolerance);
+
+    if (tolerance > 0) {
+      geom = DouglasPeuckerSimplifier.simplify(scaled, tolerance);
+    }
+
     List<List<CoordinateSequence>> groups = GeometryCoordinateSequences.extractGroups(geom, minSize);
     try {
       sliced = TiledGeometry.sliceIntoTiles(groups, buffer, area, z, extents);
