@@ -14,6 +14,7 @@ import org.locationtech.jts.geom.GeometryCollection;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -86,7 +87,9 @@ public class ShadowmapOvertureProfile implements Profile {
       .setAttr("roofOrientation", source.getTag("roof_orientation"))
       .setAttr("isPart", isPart);
 
-    if (source.getTag("roof_shape") != null) {
+    var roofShape = source.getTag("roof_shape");
+
+    if (roofShape != null && !roofShape.equals("flat")) {
       setPolygonOMBB(feature);
     }
 
@@ -94,6 +97,7 @@ public class ShadowmapOvertureProfile implements Profile {
     setCommonFeatureParams(feature, source);
 
     feature.setBufferPixels(isPart ? 128 : 64);
+    feature.setPixelToleranceAtAllZooms(0);
   }
 
   private void processForest(SourceFeature source, FeatureCollector features) {
@@ -130,7 +134,7 @@ public class ShadowmapOvertureProfile implements Profile {
   private static void setCommonFeatureParams(FeatureCollector.Feature feature, SourceFeature sourceFeature) {
     feature
       .setZoomRange(14, 14)
-      .setPixelToleranceAtAllZooms(0)
+      .setPixelToleranceAtAllZooms(0.2)
       .setMinPixelSize(0)
       .setMinPixelSizeAtMaxZoom(0)
       .setBufferPixels(4);
@@ -146,7 +150,12 @@ public class ShadowmapOvertureProfile implements Profile {
       if (dataset.equals("Microsoft ML Buildings")) {
         feature.setAttr("msId", recordId);
       } else if (dataset.equals("OpenStreetMap")) {
-        feature.setAttr("osmId", recordId.split("@")[0]);
+        String osmIdWithType = recordId.split("@")[0];
+        String osmType = osmIdWithType.substring(0, 1);
+        String osmId = osmIdWithType.substring(1);
+
+        feature.setAttr("osmType", osmType);
+        feature.setAttr("osmId", Long.parseLong(osmId));
       } else if (dataset.equals("Google Open Buildings")) {
         feature.setAttr("googleId", recordId);
       }
@@ -211,21 +220,25 @@ public class ShadowmapOvertureProfile implements Profile {
               continue;
             }
 
-            if (outline.geometry.intersects(part.geometry)) {
+            var intersects = false;
+
+            try {
+              intersects = outline.geometry.intersects(part.geometry);
+            } catch (Exception e) {
+              intersects = true;
+            }
+
+            if (intersects) {
               var outlineOsmId = outline.feature.tags().get("osmId");
+              var outlineOsmType = outline.feature.tags().get("osmType");
 
               if (outlineOsmId != null) {
                 part.feature.setTag("outlineOsmId", outlineOsmId);
+                part.feature.setTag("outlineOsmType", outlineOsmType);
               }
 
-              /*try {
-                outline.geometryCopy = outline.geometryCopy.difference(part.geometry);
-              } catch (Exception e) {
-                System.out.println("Error: " + e.getMessage());
-              }*/
+              outline.geometryCopy = geometryDifference(outline.geometryCopy, part.geometry);
             }
-
-            outline.geometryCopy = geometryDifference(outline.geometryCopy, part.geometry);
           }
 
           var initialOutlineArea = outline.geometry.getArea();
@@ -242,10 +255,21 @@ public class ShadowmapOvertureProfile implements Profile {
           }
         }
       }
-    }
 
-    for (VectorTile.Feature item : items) {
-      item.tags().remove("isPart");
+      for (VectorTile.Feature item : items) {
+        item.tags().remove("isPart");
+      }
+
+      for (Iterator<VectorTile.Feature> it = items.iterator(); it.hasNext(); ) {
+        VectorTile.Feature item = it.next();
+
+        Geometry geometry = item.geometry().decode();
+        Envelope bbox = geometry.getEnvelopeInternal();
+
+        if (!bbox.intersects(ShadowmapOvertureProfile.BuildingPartWithEnvelope.TileBoundsEnvelope)) {
+          it.remove();
+        }
+      }
     }
 
     return items;
@@ -261,7 +285,11 @@ public class ShadowmapOvertureProfile implements Profile {
 
       return collection.getFactory().createGeometryCollection(outGeometries);
     } else {
-      return geometry1.difference(geometry2);
+      try {
+        return geometry1.difference(geometry2);
+      } catch (Exception e) {
+        return geometry1;
+      }
     }
   }
 
