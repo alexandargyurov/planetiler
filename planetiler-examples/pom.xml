@@ -45,6 +45,26 @@
     </dependency>
   </dependencies>
 
+  <repositories>
+    <repository>
+      <id>locationtech-releases</id>
+      <url>https://repo.eclipse.org/content/groups/releases</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>jts-snapshots</id>
+      <url>https://repo.eclipse.org/content/repositories/jts-snapshots</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
   <build>
     <plugins>
       <plugin>
