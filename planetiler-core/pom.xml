@@ -21,7 +21,7 @@
     <prometheus.version>0.16.0</prometheus.version>
     <protobuf.version>3.25.3</protobuf.version>
     <geopackage.version>6.6.5</geopackage.version>
-    <jts.version>1.20.0-SNAPSHOT</jts.version>
+    <jts.version>1.19.0</jts.version>
   </properties>
 
   <dependencies>
