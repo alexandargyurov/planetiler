@@ -1,8 +1,10 @@
 package com.onthegomap.planetiler.examples;
 
-import com.onthegomap.planetiler.*;
+import com.onthegomap.planetiler.FeatureCollector;
+import com.onthegomap.planetiler.Planetiler;
+import com.onthegomap.planetiler.Profile;
+import com.onthegomap.planetiler.VectorTile;
 import com.onthegomap.planetiler.config.Arguments;
-import com.onthegomap.planetiler.examples.StreetsUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
 import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.util.Glob;
