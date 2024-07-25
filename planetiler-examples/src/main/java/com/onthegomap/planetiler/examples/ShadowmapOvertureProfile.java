@@ -105,6 +105,7 @@ public class ShadowmapOvertureProfile implements Profile {
   private void processForest(SourceFeature source, FeatureCollector features) {
     var feature = features.polygon("forest");
 
+    setLeafType(feature, source);
     setSourceIds(feature, source);
     setCommonFeatureParams(feature, source);
   }
@@ -117,6 +118,7 @@ public class ShadowmapOvertureProfile implements Profile {
       feature.setAttr("height", StreetsUtils.parseMeters(sourceTags.get("height")));
     }
 
+    setLeafType(feature, source);
     setSourceIds(feature, source);
     setCommonFeatureParams(feature, source);
   }
@@ -129,6 +131,7 @@ public class ShadowmapOvertureProfile implements Profile {
       feature.setAttr("height", StreetsUtils.parseMeters(sourceTags.get("height")));
     }
 
+    setLeafType(feature, source);
     setSourceIds(feature, source);
     setCommonFeatureParams(feature, source);
   }
@@ -161,6 +164,15 @@ public class ShadowmapOvertureProfile implements Profile {
       } else if (dataset.equals("Google Open Buildings")) {
         feature.setAttr("googleId", recordId);
       }
+    }
+  }
+
+  private static void setLeafType(FeatureCollector.Feature feature, SourceFeature sourceFeature) {
+    var sourceTags = (HashMap<String, String>) sourceFeature.getTag("source_tags");
+    var leafType = sourceTags.get("leaf_type");
+
+    if (leafType != null && leafType.equalsIgnoreCase("needleleaved")) {
+      feature.setAttr("leafType", "needleleaved");
     }
   }
 
