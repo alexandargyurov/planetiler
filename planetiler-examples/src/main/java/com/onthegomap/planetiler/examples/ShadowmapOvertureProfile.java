@@ -118,6 +118,10 @@ public class ShadowmapOvertureProfile implements Profile {
       feature.setAttr("height", StreetsUtils.parseMeters(sourceTags.get("height")));
     }
 
+    if (sourceTags.get("min_height") != null) {
+      feature.setAttr("minHeight", StreetsUtils.parseMeters(sourceTags.get("min_height")));
+    }
+
     setLeafType(feature, source);
     setSourceIds(feature, source);
     setCommonFeatureParams(feature, source);
@@ -129,6 +133,10 @@ public class ShadowmapOvertureProfile implements Profile {
 
     if (sourceTags.get("height") != null) {
       feature.setAttr("height", StreetsUtils.parseMeters(sourceTags.get("height")));
+    }
+
+    if (sourceTags.get("min_height") != null) {
+      feature.setAttr("minHeight", StreetsUtils.parseMeters(sourceTags.get("min_height")));
     }
 
     setLeafType(feature, source);
