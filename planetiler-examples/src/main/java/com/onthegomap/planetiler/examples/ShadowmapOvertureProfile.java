@@ -26,9 +26,15 @@ public class ShadowmapOvertureProfile implements Profile {
 
   @Override
   public void processFeature(SourceFeature source, FeatureCollector features) {
-    var level = source.getTag("level");
+    var isUndergroundTag = source.getTag("is_underground");
 
-    if (level != null && (Integer)level < 0) {
+    if (isUndergroundTag != null && (boolean) isUndergroundTag) {
+      return;
+    }
+
+    var levelTag = source.getTag("level");
+
+    if (isUndergroundTag == null && levelTag != null && (Integer)levelTag < 0) {
       return;
     }
 
@@ -171,6 +177,8 @@ public class ShadowmapOvertureProfile implements Profile {
         feature.setAttr("osmId", Long.parseLong(osmId));
       } else if (dataset.equals("Google Open Buildings")) {
         feature.setAttr("googleId", recordId);
+      } else if (dataset.equals("Esri Community Maps")) {
+        feature.setAttr("esriId", recordId);
       }
     }
   }
